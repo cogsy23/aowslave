@@ -28,13 +28,37 @@ volatile uint8_t current_byte;
 volatile uint8_t ROM_command;
 volatile uint8_t id_index;
 volatile uint8_t read_val = 0x00;
-volatile uint8_t id[8] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10}; //CRC-8, Serial-48, Family-8
+volatile uint8_t id[8] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xF1}; //CRC-8, Serial-48, Family-8
 
 #define set_timer(us_inc) {OCR0A=us_inc; TCCR0B = (1<<CS01);}
 #define stop_timer() TCCR0B = 0
 #define pull_down() DDRB |= (1<<DDB1)
 #define release() DDRB &= ~(1<<DDB1)
 #define pin_high() PINB & (1<<PINB1)
+#define pulse() {PORTB |= (1<<PORTB4); asm ("nop"); PORTB &= ~(1<<PORTB4);}
+
+void do_search_rom(uint8_t val) {
+	if(state == WRITE) {
+		if(!val == !(read_val & 0x01)) {
+			state = READ;
+			if(bit_count == 8) {
+				bit_count = 0;
+				id_index--;
+			}
+			read_val = (id[id_index] >> bit_count) & 0x01;
+			
+		} else {
+			//we were deselected
+			state = WAIT_RESET;
+		}
+	} else {
+		read_val = ~read_val;
+		if(read_val == ((id[id_index] >> bit_count) & 0x01)) {
+			state = WRITE;
+			bit_count++;
+		}
+	}
+}
 
 void get_rom_command(uint8_t val) {
 	//assume we're in WRITE
@@ -43,27 +67,9 @@ void get_rom_command(uint8_t val) {
 		ROM_command = current_byte;
 		//decide if we need to start reading/writing
 		if(current_byte == CMD_SEARCH_ROM || current_byte == CMD_ALARM_SEARCH) {
-			state = READ;
-			bit_count = 0;
 			id_index = 7;
-			read_val = id[id_index];
-		}
-	}
-}
-
-void do_search_rom(uint8_t val) {
-	if(state == WRITE) {
-		if(!val == !(read_val & 0x01)) {
-			state = READ;
-			read_val = read_val >> 1;
-		} else {
-			//we were deselected
-			state = WAIT_RESET;
-		}
-	} else {
-		read_val = ~read_val;
-		if(!val && (read_val & 0x01)) {
-			state = WRITE;
+			bit_count = 0;
+			do_search_rom(0);
 		}
 	}
 }
@@ -77,7 +83,7 @@ void do_alarm_search(uint8_t val) {
 	}
 }
 
-void process_bit(uint8_t val) {
+void inline process_bit(uint8_t val) {
 	switch(ROM_command) {
 		case 0x00:           get_rom_command(val); break;
 		case CMD_SEARCH_ROM: do_search_rom(val); break;
@@ -123,6 +129,7 @@ ISR(__vector_PCINT0_RISING, ISR_NOBLOCK) {
 		ROM_command = 0;
 		id_index = 0;
 		state = START_PRES;
+		read_val = 0;
 		set_timer(20);
 	} else {
 		switch(state) {
@@ -159,11 +166,13 @@ ISR(TIMER0_COMPA_vect) {
 			break;
 		case WRITE:
 			stop_timer();
+			pulse();
 			//calling process bit should be ok here as the next event is ~30uS away
 			process_bit(pin_val);
 			break;
 		case READ:
 			stop_timer();
+			//pulse();
 			release();
 			process_bit(pin_val);
 			break;
@@ -182,6 +191,7 @@ void onewireslave_start() {
 //	DDRB &= ~(1<<PB1);
 //	PORTB &= ~(1<<PB1);
 //	PINB &= ~(1<<PB1);
+	DDRB |= (1<<DDB4);
 	
 	//setup interrupt
 	GIMSK |= 1 << PCIE; //enable
