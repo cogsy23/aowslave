@@ -22,26 +22,44 @@ typedef enum {
 	READ //This device is writing to the bus
 } state_t;
 volatile state_t state;	//the current state of this onewire device
-volatile uint16_t us_count;	//uS since last PCINT
+volatile uint16_t us_count;	//uS since last PCINT_FALL
 volatile uint8_t bit_count;
 volatile uint8_t current_byte;
 volatile uint8_t ROM_command;
+volatile uint8_t rom_matched;
 volatile uint8_t id_index;
-volatile uint8_t read_val = 0x00;
-volatile uint8_t id[8] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xF1}; //CRC-8, Serial-48, Family-8
+volatile uint8_t read_val;
+volatile uint8_t id[8] = {0x37, 0x00, 0x08, 0x02, 0x0A, 0xA9, 0x50, 0x10}; //CRC-8, Serial-48, Family-8
 
 #define set_timer(us_inc) {OCR0A=us_inc; TCCR0B = (1<<CS01);}
 #define stop_timer() TCCR0B = 0
 #define pull_down() DDRB |= (1<<DDB1)
 #define release() DDRB &= ~(1<<DDB1)
-#define pin_high() PINB & (1<<PINB1)
-#define pulse() {PORTB |= (1<<PORTB4); asm ("nop"); PORTB &= ~(1<<PORTB4);}
+#define pin_high() (PINB & (1<<PINB1)) >> PINB1
+
+void do_match_rom(uint8_t val) {
+	//assume state == WRITE
+	uint8_t id_bit_val = (id[id_index] >> bit_count++) & 0x01; //LSB first
+	if(val != id_bit_val) {
+		//deselected
+		state = WAIT_RESET;
+	} else if(bit_count == 8) {
+		if(id_index == 0) {
+			rom_matched = 0x01;
+		}
+		bit_count = 0;
+		id_index--;
+	}
+}
 
 void do_search_rom(uint8_t val) {
 	if(state == WRITE) {
 		if(!val == !(read_val & 0x01)) {
 			state = READ;
 			if(bit_count == 8) {
+				if(id_index == 0) {
+					rom_matched = 0x01;
+				}
 				bit_count = 0;
 				id_index--;
 			}
@@ -77,25 +95,30 @@ void get_rom_command(uint8_t val) {
 		id_index = 7;
 		bit_count = 0;
 		//decide if we need to start reading/writing
-		if(current_byte == CMD_SEARCH_ROM) {			
-			do_search_rom(0);
-		} else if(current_byte == CMD_ALARM_SEARCH) {
-			do_alarm_search(0);
+		switch (current_byte) {
+			case CMD_SEARCH_ROM: do_search_rom(0); break;
+			case CMD_ALARM_SEARCH: do_alarm_search(0); break;
+			case CMD_SKIP_ROM: rom_matched = 0x01; break;
+			default: break;
 		}
 	}
 }
 
-void inline process_bit(uint8_t val) {
-	switch(ROM_command) {
-		case 0x00:           get_rom_command(val); break;
-		case CMD_SEARCH_ROM: do_search_rom(val); break;
-		case CMD_ALARM_SEARCH: do_alarm_search(val); break;
-		case CMD_MATCH_ROM:
-		case CMD_SKIP_ROM:
-		case CMD_READ_ROM:
-		default:
-			state = WAIT_RESET;	//unknown ROM command
-			break;
+void process_bit(uint8_t val) {
+	if(rom_matched) {
+		PORTB |= (1<<PORTB4);
+	} else {
+		switch(ROM_command) {
+			case 0x00:           get_rom_command(val); break;
+			case CMD_SEARCH_ROM: do_search_rom(val); break;
+			case CMD_ALARM_SEARCH: do_alarm_search(val); break;
+			case CMD_MATCH_ROM: do_match_rom(val); break;
+			case CMD_SKIP_ROM:
+			case CMD_READ_ROM:
+			default:
+				state = WAIT_RESET;	//unknown ROM command
+				break;
+		}
 	}
 }
 
@@ -132,6 +155,8 @@ ISR(__vector_PCINT0_RISING, ISR_NOBLOCK) {
 		id_index = 0;
 		state = START_PRES;
 		read_val = 0;
+		rom_matched = 0;
+		PORTB &= ~(1<<PORTB4);
 		set_timer(20);
 	} else {
 		switch(state) {
@@ -170,14 +195,12 @@ ISR(TIMER0_COMPA_vect) {
 			//stop_timer();
 			set_timer(255); //TODO if the bus is held idle long enough, this will process another byte
 			                //but we need the timer to keep running to catch reset pulses
-			pulse();
 			//calling process bit should be ok here as the next event is ~30uS away
 			process_bit(pin_val);
 			break;
 		case READ:
 			//stop_timer();
 			set_timer(255); //TODO if the bus is held idle long enough, this will process another byte
-			//pulse();
 			release();
 			process_bit(pin_val);
 			break;
