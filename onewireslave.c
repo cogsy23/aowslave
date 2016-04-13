@@ -105,6 +105,17 @@ void do_search_rom(uint8_t val) {
 	}
 }
 
+void do_read_rom() {
+	read_val = ((id[id_index] >> bit_count) & 0x01);
+	if(++bit_count == 8) {
+		if(id_index == 0) {
+			rom_matched = 0x01;
+		}
+		bit_count = 0;
+		id_index--;
+	}
+}
+
 //TODO expose alarm condition API
 volatile uint8_t alarm_condition = 0;
 void do_alarm_search(uint8_t val) {
@@ -127,6 +138,10 @@ void get_rom_command(uint8_t val) {
 			case CMD_SEARCH_ROM: do_search_rom(0); break;
 			case CMD_ALARM_SEARCH: do_alarm_search(0); break;
 			case CMD_SKIP_ROM: rom_matched = 0x01; break;
+			case CMD_READ_ROM:
+				state = READ;
+				do_read_rom();
+				break;
 			default: break;
 		}
 	}
@@ -170,8 +185,8 @@ void process_bit(uint8_t val) {
 			case CMD_SEARCH_ROM: do_search_rom(val); break;
 			case CMD_ALARM_SEARCH: do_alarm_search(val); break;
 			case CMD_MATCH_ROM: do_match_rom(val); break;
+			case CMD_READ_ROM: do_read_rom(val); break;
 			case CMD_SKIP_ROM:
-			case CMD_READ_ROM:
 			default:
 				state = WAIT_RESET;	//unknown ROM command
 				break;
