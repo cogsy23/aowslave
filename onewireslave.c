@@ -60,26 +60,28 @@ void do_search_rom(uint8_t val) {
 	}
 }
 
-void get_rom_command(uint8_t val) {
-	//assume we're in WRITE
-	current_byte = (current_byte >> 1) | (val!=0 ? 0x80 : 0x00);
-	if(++bit_count == 8) {
-		ROM_command = current_byte;
-		//decide if we need to start reading/writing
-		if(current_byte == CMD_SEARCH_ROM || current_byte == CMD_ALARM_SEARCH) {
-			id_index = 7;
-			bit_count = 0;
-			do_search_rom(0);
-		}
-	}
-}
-
 volatile uint8_t alarm_condition = 0;
 void do_alarm_search(uint8_t val) {
 	if(alarm_condition) {
 		do_search_rom(val);
 	} else {
 		state = WAIT_RESET;
+	}
+}
+
+void get_rom_command(uint8_t val) {
+	//assume we're in WRITE
+	current_byte = (current_byte >> 1) | (val!=0 ? 0x80 : 0x00);
+	if(++bit_count == 8) {
+		ROM_command = current_byte;
+		id_index = 7;
+		bit_count = 0;
+		//decide if we need to start reading/writing
+		if(current_byte == CMD_SEARCH_ROM) {			
+			do_search_rom(0);
+		} else if(current_byte == CMD_ALARM_SEARCH) {
+			do_alarm_search(0);
+		}
 	}
 }
 
