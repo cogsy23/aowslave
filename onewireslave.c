@@ -147,7 +147,7 @@ ISR(__vector_PCINT0_RISING, ISR_NOBLOCK) {
 //this samples the pin and conditionally jumps to the rising or falling ISR
 ISR(PCINT0_vect, ISR_NAKED) {
 	asm (
-		"IN __tmp_reg__, 0x36\t\n" //PINB
+		"IN __tmp_reg__, 0x16\t\n" //PINB
 		"SBRS __tmp_reg__, 1\t\n"
 		"RJMP __vector_PCINT0_FALLING\t\n"
 		"RJMP __vector_PCINT0_RISING\t\n"
@@ -167,13 +167,16 @@ ISR(TIMER0_COMPA_vect) {
 			release();
 			break;
 		case WRITE:
-			stop_timer();
+			//stop_timer();
+			set_timer(255); //TODO if the bus is held idle long enough, this will process another byte
+			                //but we need the timer to keep running to catch reset pulses
 			pulse();
 			//calling process bit should be ok here as the next event is ~30uS away
 			process_bit(pin_val);
 			break;
 		case READ:
-			stop_timer();
+			//stop_timer();
+			set_timer(255); //TODO if the bus is held idle long enough, this will process another byte
 			//pulse();
 			release();
 			process_bit(pin_val);
