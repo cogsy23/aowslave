@@ -19,8 +19,9 @@ typedef enum {
 	START_PRES,	//This device is responding to a reset pulse with a presence pulse
 	END_PRES,
 	WRITE,	//The master is writing to the bus
-	READ //This device is writing to the bus
+	READ //The master is reading from the bus
 } state_t;
+
 volatile state_t state;	//the current state of this onewire device
 volatile uint16_t us_count;	//uS since last PCINT_FALL
 volatile uint8_t bit_count;
@@ -29,7 +30,11 @@ volatile uint8_t ROM_command;
 volatile uint8_t rom_matched;
 volatile uint8_t id_index;
 volatile uint8_t read_val;
+volatile uint8_t tx_byte;
 volatile uint8_t id[8] = {0x37, 0x00, 0x08, 0x02, 0x0A, 0xA9, 0x50, 0x10}; //CRC-8, Serial-48, Family-8
+	
+uint8_t (*_callback_byte_received)(uint8_t byte);	//called at the end of each byte received from master after ROM commands
+void (*_callback_byte_sent)(void);	//called at the end of each byte sent to master
 
 #define set_timer(us_inc) {OCR0A=us_inc; TCCR0B = (1<<CS01);}
 #define stop_timer() TCCR0B = 0
@@ -37,6 +42,28 @@ volatile uint8_t id[8] = {0x37, 0x00, 0x08, 0x02, 0x0A, 0xA9, 0x50, 0x10}; //CRC
 #define release() DDRB &= ~(1<<DDB1)
 #define pin_high() (PINB & (1<<PINB1)) >> PINB1
 
+void onewireslave_set_received(uint8_t (*callback)(uint8_t)) {
+	_callback_byte_received = callback;
+}
+
+void onewireslave_set_sent(void (*callback)(void)) {
+	_callback_byte_sent = callback;
+}
+
+void onewireslave_set_txbyte(uint8_t data) {
+	tx_byte = data;
+}
+
+/**
+ * these function form a sort of hierachy with process_bit() as the root, and the branching
+ * determined by the values of ROM_command and rom_matched.  These are reset to 0 on every
+ * reset pulse, then each bit received from the master is sent through process_bit() to 
+ * whichever function is currently being executed.
+ *
+ * This will process all ROM commands and then forward bytes on to application code to deal
+ * with function commands and other data transfer.
+ */
+ 
 void do_match_rom(uint8_t val) {
 	//assume state == WRITE
 	uint8_t id_bit_val = (id[id_index] >> bit_count++) & 0x01; //LSB first
@@ -78,6 +105,7 @@ void do_search_rom(uint8_t val) {
 	}
 }
 
+//TODO expose alarm condition API
 volatile uint8_t alarm_condition = 0;
 void do_alarm_search(uint8_t val) {
 	if(alarm_condition) {
@@ -104,9 +132,38 @@ void get_rom_command(uint8_t val) {
 	}
 }
 
+/**
+ * If we're still selected then start processing bits as higher levels functions.
+ * This will start in WRITE, and send a byte at a time to user callback.  If the callback
+ * returns non-zero, then we switch to READ and start transmitting tx_byte.
+ */
+void do_function_bytes(uint8_t val) {
+	if(state == WRITE) {
+		current_byte = (current_byte >> 1) | (val!=0 ? 0x80 : 0x00);
+		if(++bit_count == 8) {
+			bit_count = 0;
+			if (_callback_byte_received) {
+				if(_callback_byte_received(current_byte)) {
+					read_val = tx_byte & 0x01;
+					state = READ;
+				}
+			}
+		}
+	} else {
+		if(++bit_count == 8) {
+			bit_count = 0;
+			if (_callback_byte_sent) {
+				_callback_byte_sent();
+			}
+		}
+		
+		read_val = (tx_byte >> bit_count) & 0x01;
+	}
+}
+
 void process_bit(uint8_t val) {
 	if(rom_matched) {
-		PORTB |= (1<<PORTB4);
+		do_function_bytes(val);
 	} else {
 		switch(ROM_command) {
 			case 0x00:           get_rom_command(val); break;
@@ -156,14 +213,13 @@ ISR(__vector_PCINT0_RISING, ISR_NOBLOCK) {
 		state = START_PRES;
 		read_val = 0;
 		rom_matched = 0;
-		PORTB &= ~(1<<PORTB4);
 		set_timer(20);
 	} else {
 		switch(state) {
 			case END_PRES:
 				state = WRITE;
 				stop_timer();
-			break;
+				break;
 			default: break;
 		}
 	}
@@ -214,12 +270,6 @@ void onewireslave_start() {
 	
 	//setup timer
 	TCCR0A = 1 << WGM01;	//CTC mode
-	
-	//setup pin
-//	DDRB &= ~(1<<PB1);
-//	PORTB &= ~(1<<PB1);
-//	PINB &= ~(1<<PB1);
-	DDRB |= (1<<DDB4);
 	
 	//setup interrupt
 	GIMSK |= 1 << PCIE; //enable
