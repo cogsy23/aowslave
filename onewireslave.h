@@ -11,8 +11,10 @@
 
 /*
  * Start timers and interrupts for one wire slave
+ * 
+ * uint8_t[8] bus_id is the 8 byte device id this device should respond to.
  */
-void onewireslave_start();
+void onewireslave_start(uint8_t *bus_id);
 
 /*
  * Register callback for bytes received from master.

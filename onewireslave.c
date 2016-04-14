@@ -31,7 +31,7 @@ volatile uint8_t rom_matched;
 volatile uint8_t id_index;
 volatile uint8_t read_val;
 volatile uint8_t tx_byte;
-volatile uint8_t id[8] = {0x37, 0x00, 0x08, 0x02, 0x0A, 0xA9, 0x50, 0x10}; //CRC-8, Serial-48, Family-8
+volatile uint8_t *id;
 	
 uint8_t (*_callback_byte_received)(uint8_t byte);	//called at the end of each byte received from master after ROM commands
 void (*_callback_byte_sent)(void);	//called at the end of each byte sent to master
@@ -279,7 +279,8 @@ ISR(TIMER0_COMPA_vect) {
 	}
 }
 
-void onewireslave_start() {
+void onewireslave_start(uint8_t *bus_id) {
+	id = bus_id;
 	state = WAIT_RESET;
 	us_count = 0;
 	
