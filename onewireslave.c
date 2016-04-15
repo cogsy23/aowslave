@@ -194,11 +194,12 @@ void process_bit(uint8_t val) {
 	}
 }
 
-ISR(__vector_PCINT0_FALLING, ISR_NOBLOCK) {
+ISR(__vector_PCINT0_FALLING) {
 	//The shortest pulse duration on the PCINT pin can be 1us
 	//reset timer
 	TCNT0 = 0x0;
 	us_count = 0;
+	TIFR = (1<<OCF0A);
 
 	switch(state) {
 		case START_PRES:
@@ -221,7 +222,8 @@ ISR(__vector_PCINT0_FALLING, ISR_NOBLOCK) {
 }
 
 ISR(__vector_PCINT0_RISING, ISR_NOBLOCK) {
-	if((us_count + TCNT0) >= 480) { //reset pulse
+	//There is a race between this ISR and TCNT0 overflowing
+	if((us_count + TCNT0) >= 460) { //reset pulse
 		bit_count = 0;
 		ROM_command = 0;
 		id_index = 0;
@@ -243,11 +245,11 @@ ISR(__vector_PCINT0_RISING, ISR_NOBLOCK) {
 //this samples the pin and conditionally jumps to the rising or falling ISR
 ISR(PCINT0_vect, ISR_NAKED) {
 	asm (
-		"IN __tmp_reg__, 0x16\t\n" //PINB
-		"SBRS __tmp_reg__, 1\t\n"
+		"IN __tmp_reg__, %[port]\t\n" //Sample PIN
+		"SBRS __tmp_reg__, 1\t\n"	//if a rising edge...
 		"RJMP __vector_PCINT0_FALLING\t\n"
 		"RJMP __vector_PCINT0_RISING\t\n"
-		:::
+		:: [port] "I"(_SFR_IO_ADDR(PINB)) :
 	);
 }
 
