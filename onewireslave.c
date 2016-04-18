@@ -245,8 +245,7 @@ ISR(__vector_PCINT0_RISING, ISR_NOBLOCK) {
 //this samples the pin and conditionally jumps to the rising or falling ISR
 ISR(PCINT0_vect, ISR_NAKED) {
 	asm (
-		"IN __tmp_reg__, %[port]\t\n" //Sample PIN
-		"SBRS __tmp_reg__, 1\t\n"	//if a rising edge...
+		"SBIS %[port], 1\t\n"
 		"RJMP __vector_PCINT0_FALLING\t\n"
 		"RJMP __vector_PCINT0_RISING\t\n"
 		:: [port] "I"(_SFR_IO_ADDR(PINB)) :
