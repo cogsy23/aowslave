@@ -221,24 +221,21 @@ ISR(__vector_PCINT0_FALLING) {
 	}
 }
 
-ISR(__vector_PCINT0_RISING, ISR_NOBLOCK) {
+ISR(__vector_PCINT0_RISING) {
 	//There is a race between this ISR and TCNT0 overflowing
-	if((us_count + TCNT0) >= 460) { //reset pulse
+	uint8_t counter = (TIFR & (1<<OCF0A) ? OCR0A : TCNT0);
+	sei();
+	if((us_count + counter) >= 460) { //reset pulse
 		bit_count = 0;
 		ROM_command = 0;
 		id_index = 0;
 		state = START_PRES;
 		read_val = 0;
 		rom_matched = 0;
-		set_timer(20);
-	} else {
-		switch(state) {
-			case END_PRES:
-				state = WRITE;
-				stop_timer();
-				break;
-			default: break;
-		}
+		set_timer(15);
+	} else if(state == END_PRES) {
+		state = WRITE;
+		stop_timer();
 	}
 }
 
@@ -256,26 +253,16 @@ ISR(TIMER0_COMPA_vect) {
 	volatile uint8_t pin_val = pin_high();
 	us_count += OCR0A;
 	
+	release();	//we want to make sure the bus is left idle in most cases
+	set_timer(255);
 	switch(state) {
 		case START_PRES:
 			pull_down();
 			break;
-		case END_PRES:
-			release();
-			break;
 		case WRITE:
-			//stop_timer();
-			set_timer(255); //TODO if the bus is held idle long enough, this will process another byte
-			                //but we need the timer to keep running to catch reset pulses
+		case READ:
 			//calling process bit should be ok here as the next event is ~30uS away
 			process_bit(pin_val);
-			break;
-		case READ:
-			//stop_timer();
-			set_timer(255); //TODO if the bus is held idle long enough, this will process another byte
-			release();
-			process_bit(pin_val);
-			break;
 		default: break;
 	}
 }
