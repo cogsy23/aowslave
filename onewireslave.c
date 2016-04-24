@@ -23,7 +23,6 @@ typedef enum {
 } state_t;
 
 volatile state_t state;	//the current state of this onewire device
-volatile uint16_t us_count;	//uS since last PCINT_FALL
 volatile uint8_t bit_count;
 volatile uint8_t current_byte;
 volatile uint8_t ROM_command;
@@ -36,7 +35,8 @@ volatile uint8_t *id;
 uint8_t (*_callback_byte_received)(uint8_t byte);	//called at the end of each byte received from master after ROM commands
 void (*_callback_byte_sent)(void);	//called at the end of each byte sent to master
 
-#define set_timer(us_inc) {OCR0A=us_inc; TCCR0B = (1<<CS01);}
+#define set_timer(us_inc) {OCR0A=us_inc; TCCR0B=(1<<CS01)|(1<<CS00);}
+#define reset_timer() {	GTCCR=(1<<PSR0); TCNT0=0x0; TIFR=(1<<OCF0A)|(1<<OCF0B); TCCR0B=(1<<CS01)|(1<<CS00);}
 #define stop_timer() TCCR0B = 0
 #define pull_down() DDRB |= (1<<DDB1)
 #define release() DDRB &= ~(1<<DDB1)
@@ -195,22 +195,19 @@ void process_bit(uint8_t val) {
 }
 
 ISR(__vector_PCINT0_FALLING) {
-	//The shortest pulse duration on the PCINT pin can be 1us
-	//reset timer
-	TCNT0 = 0x0;
-	us_count = 0;
-	TIFR = (1<<OCF0A);
-
+	reset_timer();
 	switch(state) {
 		case START_PRES:
-			set_timer(120); //presence pulse duration
+			set_timer(15); //presence pulse duration
 			state = END_PRES;
 			break;
 		case WRITE:
-			set_timer(20);
+			//PCMSK &= ~(1 << PCINT1);
+			set_timer(2);
 			break;
 		case READ:
-			set_timer(15);
+			//PCMSK &= ~(1 << PCINT1);
+			set_timer(2);
 			if(read_val & 0x01) { //send the LSB of read_val
 				release();
 			} else {
@@ -222,20 +219,13 @@ ISR(__vector_PCINT0_FALLING) {
 }
 
 ISR(__vector_PCINT0_RISING) {
-	//There is a race between this ISR and TCNT0 overflowing
-	uint8_t counter = (TIFR & (1<<OCF0A) ? OCR0A : TCNT0);
-	sei();
-	if((us_count + counter) >= 460) { //reset pulse
-		bit_count = 0;
-		ROM_command = 0;
-		id_index = 0;
-		state = START_PRES;
-		read_val = 0;
-		rom_matched = 0;
-		set_timer(15);
-	} else if(state == END_PRES) {
-		state = WRITE;
-		stop_timer();
+	switch(state) {
+		case START_PRES:
+			GTCCR=(1<<PSR0);
+			TCNT0=0x0;
+			set_timer(2); break;
+		case END_PRES: state = WRITE; stop_timer();
+		default: break;
 	}
 }
 
@@ -249,36 +239,46 @@ ISR(PCINT0_vect, ISR_NAKED) {
 	);
 }
 
+//COMPA used for reading/writing pin timings
 ISR(TIMER0_COMPA_vect) {
 	volatile uint8_t pin_val = pin_high();
-	us_count += OCR0A;
-	
-	release();	//we want to make sure the bus is left idle in most cases
-	set_timer(255);
+
 	switch(state) {
-		case START_PRES:
-			pull_down();
-			break;
+		case START_PRES: pull_down(); break;
+		case END_PRES: release(); break;
 		case WRITE:
 		case READ:
-			//calling process bit should be ok here as the next event is ~30uS away
+			release();
+			sei();
 			process_bit(pin_val);
 		default: break;
 	}
 }
 
+//COMPB used to detect reset pulse
+ISR(TIMER0_COMPB_vect) {
+	if(pin_high() == 0) {
+		bit_count = 0;
+		ROM_command = 0;
+		id_index = 0;
+		state = START_PRES;
+		read_val = 0;
+		rom_matched = 0;
+	}
+	stop_timer();
+	release();
+}
+
 void onewireslave_start(uint8_t *bus_id) {
 	id = bus_id;
 	state = WAIT_RESET;
-	us_count = 0;
 	
-	//setup timer
-	TCCR0A = 1 << WGM01;	//CTC mode
+	OCR0B = 58;	//480uS reset timer (actually 468uS)
 	
 	//setup interrupt
 	GIMSK |= 1 << PCIE; //enable
 	PCMSK |= 1 << PCINT1; //mask
 	GIFR |= 1 << PCIF; //clear
-	TIMSK |= (1 << OCIE0A);
+	TIMSK |= (1<<OCIE0A) | (1<<OCIE0B);
 	sei();
 }
