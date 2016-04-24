@@ -36,7 +36,7 @@ uint8_t (*_callback_byte_received)(uint8_t byte);	//called at the end of each by
 void (*_callback_byte_sent)(void);	//called at the end of each byte sent to master
 
 #define set_timer(us_inc) {OCR0A=us_inc; TCCR0B=(1<<CS01)|(1<<CS00);}
-#define reset_timer() {	GTCCR=(1<<PSR0); TCNT0=0x0; TIFR=(1<<OCF0A)|(1<<OCF0B); TCCR0B=(1<<CS01)|(1<<CS00);}
+#define reset_timer() {	GTCCR|=(1<<PSR0); TCNT0=0x0; TIFR=(1<<OCF0A)|(1<<OCF0B); TCCR0B=(1<<CS01)|(1<<CS00);}
 #define stop_timer() TCCR0B = 0
 #define pull_down() DDRB |= (1<<DDB1)
 #define release() DDRB &= ~(1<<DDB1)
@@ -202,11 +202,9 @@ ISR(__vector_PCINT0_FALLING) {
 			state = END_PRES;
 			break;
 		case WRITE:
-			//PCMSK &= ~(1 << PCINT1);
 			set_timer(2);
 			break;
 		case READ:
-			//PCMSK &= ~(1 << PCINT1);
 			set_timer(2);
 			if(read_val & 0x01) { //send the LSB of read_val
 				release();
@@ -221,8 +219,8 @@ ISR(__vector_PCINT0_FALLING) {
 ISR(__vector_PCINT0_RISING) {
 	switch(state) {
 		case START_PRES:
-			GTCCR=(1<<PSR0);
-			TCNT0=0x0;
+			GTCCR |= (1<<PSR0);
+			TCNT0 = 0x0;
 			set_timer(2); break;
 		case END_PRES: state = WRITE; stop_timer();
 		default: break;
@@ -256,6 +254,7 @@ ISR(TIMER0_COMPA_vect) {
 }
 
 //COMPB used to detect reset pulse
+//this also fires once when the bus is left idle for too long
 ISR(TIMER0_COMPB_vect) {
 	if(pin_high() == 0) {
 		bit_count = 0;
