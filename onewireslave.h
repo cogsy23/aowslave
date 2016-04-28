@@ -1,17 +1,33 @@
 /*
- * onewireslave.h
+ * The MIT License (MIT)
  *
- * Created: 9/04/2016 6:08:47 PM
- *  Author: Ben Coughlan
- */ 
-
+ * Copyright (c) 2016 Ben Coughlan
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
 
 #ifndef ONEWIRESLAVE_H_
 #define ONEWIRESLAVE_H_
 
 /*
  * Start timers and interrupts for one wire slave
- * 
+ *
  * uint8_t[8] bus_id is the 8 byte device id this device should respond to.
  */
 void onewireslave_start(uint8_t *bus_id);
@@ -38,15 +54,15 @@ void onewireslave_set_received(uint8_t (*callback)(uint8_t));
  *
  * The callback is called form interrupt context.
  */
- 
+
 void onewireslave_set_sent(void (*callback)(void));
 
 /*
  * Set the next byte to send to the master.  This must be done before the final
  * bit of the previous byte on the bus, usually from the received and sent callbacks.
- * 
+ *
  * The previous byte will be repeated if a new one hasn't been set.
- * 
+ *
  * Byte will be sent once this device is in a transmit state, following a non-zero return
  * from the receive callback.
  */

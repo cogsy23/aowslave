@@ -1,9 +1,26 @@
 /*
- * onewireslave.c
+ * The MIT License (MIT)
  *
- * Created: 9/04/2016 6:09:03 PM
- *  Author: Ben Coughlan
- */ 
+ * Copyright (c) 2016 Ben Coughlan
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
 
 #include <avr/io.h>
 #include <avr/interrupt.h>
@@ -31,7 +48,7 @@ volatile uint8_t id_index;
 volatile uint8_t read_val;
 volatile uint8_t tx_byte;
 volatile uint8_t *id;
-	
+
 uint8_t (*_callback_byte_received)(uint8_t byte);	//called at the end of each byte received from master after ROM commands
 void (*_callback_byte_sent)(void);	//called at the end of each byte sent to master
 
@@ -57,13 +74,13 @@ void onewireslave_set_txbyte(uint8_t data) {
 /**
  * these function form a sort of hierachy with process_bit() as the root, and the branching
  * determined by the values of ROM_command and rom_matched.  These are reset to 0 on every
- * reset pulse, then each bit received from the master is sent through process_bit() to 
+ * reset pulse, then each bit received from the master is sent through process_bit() to
  * whichever function is currently being executed.
  *
  * This will process all ROM commands and then forward bytes on to application code to deal
  * with function commands and other data transfer.
  */
- 
+
 void do_match_rom(uint8_t val) {
 	//assume state == WRITE
 	uint8_t id_bit_val = (id[id_index] >> bit_count++) & 0x01; //LSB first
@@ -91,7 +108,7 @@ void do_search_rom(uint8_t val) {
 				id_index--;
 			}
 			read_val = (id[id_index] >> bit_count) & 0x01;
-			
+
 		} else {
 			//we were deselected
 			state = WAIT_RESET;
@@ -171,7 +188,7 @@ void do_function_bytes(uint8_t val) {
 				_callback_byte_sent();
 			}
 		}
-		
+
 		read_val = (tx_byte >> bit_count) & 0x01;
 	}
 }
@@ -271,9 +288,9 @@ ISR(TIMER0_COMPB_vect) {
 void onewireslave_start(uint8_t *bus_id) {
 	id = bus_id;
 	state = WAIT_RESET;
-	
+
 	OCR0B = 58;	//480uS reset timer (actually 468uS)
-	
+
 	//setup interrupt
 	GIMSK |= 1 << PCIE; //enable
 	PCMSK |= 1 << PCINT1; //mask
