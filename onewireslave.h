@@ -54,8 +54,18 @@ void onewireslave_set_received(uint8_t (*callback)(uint8_t));
  *
  * The callback is called form interrupt context.
  */
-
 void onewireslave_set_sent(void (*callback)(void));
+
+/*
+ * Register callback for when this device is selected.
+ *
+ * The callback is called whenever this device is selected at the beginning of a 
+ * new transaction.  This includes SkipROM commands.  This is an opportunity to
+ * reset state to known values.
+ *
+ * The callback is called form interrupt context.
+ */
+void onewireslave_set_selected(void (*callback)(void));
 
 /*
  * Set the next byte to send to the master.  This must be done before the final

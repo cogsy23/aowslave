@@ -51,6 +51,7 @@ volatile uint8_t *id;
 
 uint8_t (*_callback_byte_received)(uint8_t byte);	//called at the end of each byte received from master after ROM commands
 void (*_callback_byte_sent)(void);	//called at the end of each byte sent to master
+void (*_callback_selected)(void);	//called when this device is selected
 
 #define set_timer(us_inc) {OCR0A=us_inc; TCCR0B=(1<<CS01)|(1<<CS00);}
 #define reset_timer() {	GTCCR|=(1<<PSR0); TCNT0=0x0; TIFR=(1<<OCF0A)|(1<<OCF0B); TCCR0B=(1<<CS01)|(1<<CS00);}
@@ -65,6 +66,10 @@ void onewireslave_set_received(uint8_t (*callback)(uint8_t)) {
 
 void onewireslave_set_sent(void (*callback)(void)) {
 	_callback_byte_sent = callback;
+}
+
+void onewireslave_set_selected(void (*callback)(void)) {
+	_callback_selected = callback;
 }
 
 void onewireslave_set_txbyte(uint8_t data) {
@@ -90,6 +95,7 @@ void do_match_rom(uint8_t val) {
 	} else if(bit_count == 8) {
 		if(id_index == 0) {
 			rom_matched = 0x01;
+			if(_callback_selected) _callback_selected();
 		}
 		bit_count = 0;
 		id_index--;
@@ -103,6 +109,7 @@ void do_search_rom(uint8_t val) {
 			if(bit_count == 8) {
 				if(id_index == 0) {
 					rom_matched = 0x01;
+					if(_callback_selected) _callback_selected();
 				}
 				bit_count = 0;
 				id_index--;
@@ -127,6 +134,7 @@ void do_read_rom() {
 	if(++bit_count == 8) {
 		if(id_index == 0) {
 			rom_matched = 0x01;
+			if(_callback_selected) _callback_selected();
 		}
 		bit_count = 0;
 		id_index--;
@@ -154,7 +162,10 @@ void get_rom_command(uint8_t val) {
 		switch (current_byte) {
 			case CMD_SEARCH_ROM: do_search_rom(0); break;
 			case CMD_ALARM_SEARCH: do_alarm_search(0); break;
-			case CMD_SKIP_ROM: rom_matched = 0x01; break;
+			case CMD_SKIP_ROM:
+				rom_matched = 0x01;
+				if(_callback_selected) _callback_selected();
+				break;
 			case CMD_READ_ROM:
 				state = READ;
 				do_read_rom();
