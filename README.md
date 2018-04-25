@@ -10,14 +10,14 @@ This implementation easily fits within 2k of program memory, and I've successful
 * Uses Timer0, any PCINT capable pin and their assosciated interrupt vectors.
 * Support for SearchROM, MatchROM, SkipROM commands.
 
-##Supported Devices
+## Supported Devices
 
 * ATtiny85
 
 I've only tested on devices that I've had a use for, but if you manage to get it running on another or
 would like help porting to another AVR please let me know.
 
-##Example
+## Example
 
 This example will wait until this device is selected (either explicitely or with a skipROM command) and then
 recieves a "read" command (0xBB).  It then outputs a counter continuously as long as the master provides READ slots.
@@ -56,7 +56,7 @@ int main(void)
 }
 ```
 
-##Notes
+## Notes
 * CRCs for device IDs can be calculated with http://www.datastat.com/sysadminjournal/maximcrc.cgi
 * Fast recovery pulses push the limits of the ISR timing capabilities.  The examples I've seen say recovery pulses can be
 as little as 1uS long.  With a typical 4k7 pullup the bus capacitance will often struggle with such short pulses any way.
@@ -65,7 +65,7 @@ My testing has been comfortable with 8uS pulses.
 slave devices can be driven completely by the sent/receive callbacks which, while still being in ISR context, have more
 relaxed timing than other asynchronous interrupts.
 
-##TODO List
+## TODO List
 * CRC Support.
 * Select which PIN to use when starting.
 * Support different clock speeds.
